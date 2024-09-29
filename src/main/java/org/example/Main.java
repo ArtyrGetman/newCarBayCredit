@@ -16,7 +16,6 @@ public class Main {
         // Удаление webhook перед регистрацией
 
         try {
-            telegramBot.execute(new DeleteWebhook());
 
             TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
             botsApi.registerBot(telegramBot);

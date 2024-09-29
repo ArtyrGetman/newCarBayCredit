@@ -17,12 +17,53 @@ import java.util.Map;
 public class TelegramBot extends TelegramLongPollingBot {
     private double carPrice = 0; // Цена автомобиля, введённая пользователем
     private String selectedSalon = ""; // Выбранный автосалон
-    private Map<String, Double> interestRates = new HashMap<>();
-    private Map<String, Integer> loanTerms = new HashMap<>();
+    private String selectedBank = "";  // Выбранный банк
+
+    // Хранение кредитных условий для банков
+    private Map<String, Map<String, Double>> interestRates = new HashMap<>();
+    private Map<String, Map<String, Integer>> loanTerms = new HashMap<>();
+
+    // Автосалоны и доступные банки
+    private Map<String, List<String>> salonsAndBanks = new HashMap<>();
 
     public TelegramBot() {
-        // Процентные ставки и сроки кредита инициализируются как в вашем примере
-        // (оставим их без изменений для простоты)
+        // Инициализация автосалонов и банков
+        List<String> mazdaBanks = new ArrayList<>();
+        mazdaBanks.add("PrivatBank");
+        mazdaBanks.add("OschadBank");
+        salonsAndBanks.put("MAZDA", mazdaBanks);
+
+        List<String> renoBanks = new ArrayList<>();
+        renoBanks.add("ABank");
+        salonsAndBanks.put("RENO", renoBanks);
+
+        List<String> toyotaBanks = new ArrayList<>();
+        toyotaBanks.add("PrivatBank");
+        toyotaBanks.add("Lising");
+        salonsAndBanks.put("TOYOTA", toyotaBanks);
+
+        // Инициализация процентных ставок и условий для каждого банка
+        // Пример для PrivatBank (для каждого салона и банка можно создать свою кредитную сетку)
+        Map<String, Double> privatRates = new HashMap<>();
+        privatRates.put("prepay_30_term_12", 3.49);
+        privatRates.put("prepay_30_term_24", 6.99);
+        interestRates.put("PrivatBank", privatRates);
+
+        Map<String, Integer> privatTerms = new HashMap<>();
+        privatTerms.put("prepay_30_term_12", 12);
+        privatTerms.put("prepay_30_term_24", 24);
+        loanTerms.put("PrivatBank", privatTerms);
+
+        // Пример для OschadBank
+        Map<String, Double> oschadRates = new HashMap<>();
+        oschadRates.put("prepay_40_term_12", 2.49);
+        oschadRates.put("prepay_40_term_24", 5.99);
+        interestRates.put("OschadBank", oschadRates);
+
+        Map<String, Integer> oschadTerms = new HashMap<>();
+        oschadTerms.put("prepay_40_term_12", 12);
+        oschadTerms.put("prepay_40_term_24", 24);
+        loanTerms.put("OschadBank", oschadTerms);
     }
 
     @Override
@@ -32,7 +73,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     @Override
     public String getBotToken() {
-        return "ТОКЕН_ВАШЕГО_БОТА"; // Замените на токен вашего бота
+        return "7524858228:AAHOOHHDHn_DJECA_jvEahBWS1VoCI70Yro"; // Замените на токен вашего бота
     }
 
     @Override
@@ -41,27 +82,42 @@ public class TelegramBot extends TelegramLongPollingBot {
             String messageText = update.getMessage().getText();
             long chatId = update.getMessage().getChatId();
 
+            // Если пользователь отправил команду /start
             if (messageText.equals("/start")) {
                 sendMessage(chatId, "Добро пожаловать! Пожалуйста, выберите автосалон:");
                 sendSalonOptions(chatId); // Отправляем кнопки с автосалонами
-            } else if (messageText.matches("\\d+")) {
+
+                // Если пользователь вводит цену автомобиля, но при этом салон и банк уже выбраны
+            } else if (messageText.matches("\\d+") && !selectedSalon.isEmpty() && !selectedBank.isEmpty()) {
                 carPrice = Double.parseDouble(messageText);
                 sendMessage(chatId, "Вы ввели цену автомобиля " + carPrice + " UAH.");
-                sendOptions(chatId); // Показать кнопки после ввода цены
+                sendLoanOptions(chatId); // Показать кнопки с кредитными условиями
+
+                // Если цена введена до выбора салона или банка
+            } else if (messageText.matches("\\d+") && (selectedSalon.isEmpty() || selectedBank.isEmpty())) {
+                sendMessage(chatId, "Сначала выберите автосалон и банк.");
             } else {
-                sendMessage(chatId, "Введите, пожалуйста, корректную цену автомобиля.");
+                sendMessage(chatId, "Введите корректную цену автомобиля.");
             }
+
         } else if (update.hasCallbackQuery()) {
             String callbackData = update.getCallbackQuery().getData();
             long chatId = update.getCallbackQuery().getMessage().getChatId();
 
+            // Пользователь выбрал автосалон
             if (callbackData.startsWith("salon_")) {
-                // Пользователь выбрал автосалон
-                selectedSalon = callbackData.replace("salon_", "");
-                sendMessage(chatId, "Вы выбрали салон: " + selectedSalon + ". Теперь введите цену автомобиля.");
-            } else if (interestRates.containsKey(callbackData)) {
-                // Обработка выбора кредитных условий после ввода цены автомобиля
-                handleLoanCalculation(chatId, callbackData);
+                selectedSalon = callbackData.replace("salon_", "").toUpperCase();
+                sendMessage(chatId, "Вы выбрали салон: " + selectedSalon + ". Теперь выберите банк:");
+                sendBankOptions(chatId); // Отправляем список банков для выбранного салона
+
+                // Пользователь выбрал банк
+            } else if (callbackData.startsWith("bank_")) {
+                selectedBank = callbackData.replace("bank_", "");
+                sendMessage(chatId, "Вы выбрали банк: " + selectedBank + ". Теперь введите цену автомобиля.");
+
+                // Пользователь выбрал кредитные условия
+            } else if (interestRates.get(selectedBank) != null && interestRates.get(selectedBank).containsKey(callbackData)) {
+                handleLoanCalculation(chatId, callbackData); // Обработка расчета кредита
             }
         }
     }
@@ -72,17 +128,11 @@ public class TelegramBot extends TelegramLongPollingBot {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
 
         // Добавляем кнопки с названиями автосалонов
-        List<InlineKeyboardButton> row1 = new ArrayList<>();
-        row1.add(createButton("MAZDA", "salon_mazda"));
-        row1.add(createButton("RENO", "salon_reno"));
-        row1.add(createButton("TOYOTA", "salon_toyota"));
-        rows.add(row1);
-
-        List<InlineKeyboardButton> row2 = new ArrayList<>();
-        row2.add(createButton("PORSHE", "salon_porshe"));
-        row2.add(createButton("HONDA", "salon_honda"));
-        row2.add(createButton("HYUNDAI", "salon_hyundai"));
-        rows.add(row2);
+        for (String salon : salonsAndBanks.keySet()) {
+            List<InlineKeyboardButton> row = new ArrayList<>();
+            row.add(createButton(salon, "salon_" + salon.toLowerCase()));
+            rows.add(row);
+        }
 
         markup.setKeyboard(rows);
 
@@ -98,38 +148,109 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
+    // Метод для отправки кнопок с банками
+    private void sendBankOptions(long chatId) {
+        InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        // Получаем список банков для выбранного автосалона
+        List<String> banks = salonsAndBanks.get(selectedSalon);
+        if (banks != null && !banks.isEmpty()) {
+            for (String bank : banks) {
+                List<InlineKeyboardButton> row = new ArrayList<>();
+                row.add(createButton(bank, "bank_" + bank));
+                rows.add(row);
+            }
+            markup.setKeyboard(rows);
+
+            SendMessage message = new SendMessage();
+            message.setChatId(String.valueOf(chatId));
+            message.setText("Выберите банк:");
+            message.setReplyMarkup(markup);
+
+            try {
+                execute(message);
+            } catch (TelegramApiException e) {
+                e.printStackTrace();
+            }
+        } else {
+            // Если у выбранного салона нет доступных банков
+            sendMessage(chatId, "К сожалению, для выбранного салона нет доступных банков.");
+            sendSalonOptions(chatId); // Возвращаемся к выбору салона
+        }
+    }
+
+
+
+    // Метод для отображения кнопок с кредитными условиями (процентными ставками и сроками)
+    private void sendLoanOptions(long chatId) {
+        InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        // Получаем ставки и условия для выбранного банка
+        Map<String, Double> rates = interestRates.get(selectedBank);
+        Map<String, Integer> terms = loanTerms.get(selectedBank);
+
+        if (rates != null && terms != null) {
+            for (String key : rates.keySet()) {
+                List<InlineKeyboardButton> row = new ArrayList<>();
+                String buttonText = String.format("%d месяцев / %.2f%%", terms.get(key), rates.get(key));
+                row.add(createButton(buttonText, key));
+                rows.add(row);
+            }
+        }
+
+        markup.setKeyboard(rows);
+
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText("Выберите условия кредита:");
+        message.setReplyMarkup(markup);
+
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
+        }
+    }
+
     // Метод для обработки расчета кредита
     private void handleLoanCalculation(long chatId, String callbackData) {
         try {
-            double interestRate = interestRates.get(callbackData); // Процентная ставка
-            int loanTerm = loanTerms.get(callbackData); // Период кредита в месяцах
-            double prepaymentPercentage = getPrepaymentPercentage(callbackData); // Процент первоначального взноса
+            Map<String, Double> bankRates = interestRates.get(selectedBank);
+            Map<String, Integer> bankTerms = loanTerms.get(selectedBank);
 
-            double prepaymentAmount = carPrice * prepaymentPercentage;  // Первоначальный взнос
-            double loanAmount = carPrice - prepaymentAmount;  // Сумма кредита
+            if (bankRates != null && bankTerms != null) {
+                double interestRate = bankRates.get(callbackData); // Процентная ставка
+                int loanTerm = bankTerms.get(callbackData); // Период кредита в месяцах
+                double prepaymentPercentage = getPrepaymentPercentage(callbackData); // Процент первоначального взноса
 
-            // Полная сумма кредита с процентами
-            double totalLoanWithInterest = loanAmount * (1 + interestRate / 100);
-            double totalAmountPaid = prepaymentAmount + totalLoanWithInterest;  // Полная сумма к оплате
+                double prepaymentAmount = carPrice * prepaymentPercentage;  // Первоначальный взнос
+                double loanAmount = carPrice - prepaymentAmount;  // Сумма кредита
 
-            // Ежемесячный платёж
-            double monthlyPayment = totalLoanWithInterest / loanTerm;
+                // Полная сумма кредита с процентами
+                double totalLoanWithInterest = loanAmount * (1 + interestRate / 100);
+                double totalAmountPaid = prepaymentAmount + totalLoanWithInterest;  // Полная сумма к оплате
 
-            // Переплата
-            double overpayment = totalAmountPaid - carPrice;
+                // Ежемесячный платёж
+                double monthlyPayment = totalLoanWithInterest / loanTerm;
 
-            // Формирование ответа на украинском языке
-            String result = String.format(
-                    "Для автосалона %s, передоплати %.0f%% та терміну %d місяців із річною ставкою %.2f%%:\n" +
-                            "Передоплата: %.2f UAH\n" +
-                            "Сума кредиту: %.2f UAH\n" +
-                            "Загалом до сплати: %.2f UAH\n" +
-                            "Переплата: %.2f UAH\n" +
-                            "**Щомісячний платіж: %.2f UAH**",
-                    selectedSalon, prepaymentPercentage * 100, loanTerm, interestRate, prepaymentAmount,
-                    totalLoanWithInterest, totalAmountPaid, overpayment, monthlyPayment
-            );
-            sendMessage(chatId, result);
+                // Переплата
+                double overpayment = totalAmountPaid - carPrice;
+
+                // Формирование ответа
+                String result = String.format(
+                        "Для автосалона %s, банка %s, передоплаты %.0f%% и срока %d месяцев с процентной ставкой %.2f%%:\n" +
+                                "Передоплата: %.2f UAH\n" +
+                                "Сумма кредита: %.2f UAH\n" +
+                                "Всего к оплате: %.2f UAH\n" +
+                                "Переплата: %.2f UAH\n" +
+                                "**Ежемесячный платёж: %.2f UAH**",
+                        selectedSalon, selectedBank, prepaymentPercentage * 100, loanTerm, interestRate, prepaymentAmount,
+                        totalLoanWithInterest, totalAmountPaid, overpayment, monthlyPayment
+                );
+                sendMessage(chatId, result);
+            }
         } catch (Exception e) {
             sendMessage(chatId, "Произошла ошибка при расчете. Пожалуйста, попробуйте снова.");
         }
@@ -151,7 +272,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         return 0;
     }
 
-    // Метод для отправки сообщения
+    // Метод для отправки сообщений
     private void sendMessage(long chatId, String text) {
         var message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
@@ -171,73 +292,6 @@ public class TelegramBot extends TelegramLongPollingBot {
         button.setCallbackData(callbackData);
         return button;
     }
-
-
-    private void sendOptions(long chatId) {
-        InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
-        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-
-        // Example for 30% prepayment (one row with all terms for 30% prepayment)
-        List<InlineKeyboardButton> row30 = new ArrayList<>();
-        row30.add(createButton("30% - 12m/3.49%", "prepay_30_term_12"));
-        row30.add(createButton("30% - 24m/6.99%", "prepay_30_term_24"));
-        row30.add(createButton("30% - 36m/8.99%", "prepay_30_term_36"));
-        row30.add(createButton("30% - 48m/11.99%", "prepay_30_term_48"));
-        row30.add(createButton("30% - 60m/11.99%", "prepay_30_term_60"));
-        rows.add(row30); // Add row to rows list
-
-        // Example for 40% prepayment (one row with all terms for 40% prepayment)
-        List<InlineKeyboardButton> row40 = new ArrayList<>();
-        row40.add(createButton("40% - 12m/2.49%", "prepay_40_term_12"));
-        row40.add(createButton("40% - 24m/5.99%", "prepay_40_term_24"));
-        row40.add(createButton("40% - 36m/8.49%", "prepay_40_term_36"));
-        row40.add(createButton("40% - 48m/11.99%", "prepay_40_term_48"));
-        row40.add(createButton("40% - 60m/11.99%", "prepay_40_term_60"));
-        rows.add(row40); // Add row to rows list
-
-        // Example for 50% prepayment (one row with all terms for 50% prepayment)
-        List<InlineKeyboardButton> row50 = new ArrayList<>();
-        row50.add(createButton("50% - 12m/1.49%", "prepay_50_term_12"));
-        row50.add(createButton("50% - 24m/4.99%", "prepay_50_term_24"));
-        row50.add(createButton("50% - 36m/7.49%", "prepay_50_term_36"));
-        row50.add(createButton("50% - 48m/9.99%", "prepay_50_term_48"));
-        row50.add(createButton("50% - 60m/9.99%", "prepay_50_term_60"));
-        rows.add(row50); // Add row to rows list
-
-        // Example for 60% prepayment (one row with all terms for 60% prepayment)
-        List<InlineKeyboardButton> row60 = new ArrayList<>();
-        row60.add(createButton("60% - 12m/0.01%", "prepay_60_term_12"));
-        row60.add(createButton("60% - 24m/3.99%", "prepay_60_term_24"));
-        row60.add(createButton("60% - 36m/5.49%", "prepay_60_term_36"));
-        row60.add(createButton("60% - 48m/9.99%", "prepay_60_term_48"));
-        row60.add(createButton("60% - 60m/9.99%", "prepay_60_term_60"));
-        rows.add(row60); // Add row to rows list
-
-        // Example for 70% prepayment (one row with all terms for 70% prepayment)
-        List<InlineKeyboardButton> row70 = new ArrayList<>();
-        row70.add(createButton("70% - 12m/0.01%", "prepay_70_term_12"));
-        row70.add(createButton("70% - 24m/0.01%", "prepay_70_term_24"));
-        row70.add(createButton("70% - 36m/4.99%", "prepay_70_term_36"));
-        row70.add(createButton("70% - 48m/7.99%", "prepay_70_term_48"));
-        row70.add(createButton("70% - 60m/7.99%", "prepay_70_term_60"));
-        rows.add(row70); // Add row to rows list
-
-        markup.setKeyboard(rows);
-
-        SendMessage message = new SendMessage();
-        message.setChatId(String.valueOf(chatId));
-        message.setText("Виберіть передоплату і термін кредиту:");
-        message.setReplyMarkup(markup);
-
-        try {
-            execute(message);
-        } catch (TelegramApiException e) {
-            e.printStackTrace();
-        }
-    }
-
-    // Helper method to create buttons
-
 
 
 }
